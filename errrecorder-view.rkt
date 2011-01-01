@@ -5,7 +5,6 @@
          net/uri-codec
          srfi/13
          srfi/14
-         (planet jaymccarthy/mongodb:1:7)
          "errrecorder-model.rkt")
 
 ; render-page : request? -> any
@@ -43,10 +42,10 @@
                       (div ((id "whatis"))
                            (h3 ((id "whatis-h3")) "What is ErrRecorder?")
                            (p ((id "whatis-p")) 
-                              (string-append "ErrRecorder is a Dr. Racket collection that records "
+                              (string-append "ErrRecorder is a DrRacket collection that records "
                                              "errors received by users while programming in Dr. "
                                              "Racket.  It groups like errors and allows users to "
-                                             "contribute solutions.  In Dr. Racket, a user can be "
+                                             "contribute solutions.  In DrRacket, a user can be "
                                              "taken to an error's page by clicking on the magnifying "
                                              "glass icon next to the error.")))
                       ,(render-groups make-url groups-ranked total)))))

@@ -5,7 +5,7 @@
          "errrecorder-view.rkt")
 
 ; contract for request
-(provide/contract (start (request? . -> . response/c)))
+(provide/contract (start (request? . -> . any/c)))
 
 ; start : request? -> (or any nothing)
 ; start location of servlet:

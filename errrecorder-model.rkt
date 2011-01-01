@@ -1,15 +1,32 @@
-#lang racket
+#lang racket/unit
 
 (require racket/date
+         racket/list
+         racket/match
          srfi/13
+         "signatures.rkt"
          (planet neil/levenshtein:1:3)
          (planet jaymccarthy/mongodb:1:7))
+
+(import db-name^)
+(export errrecorder-db^)
+
+
+#;(provide insert-error
+         insert-solution
+         get-all-types
+         get-type-messages
+         get-solutions
+         get-gid
+         upvote
+         downvote)
+
 
 ; the mongodb connection
 (define m (create-mongo))
 
 ; errrecorder mongo db
-(define db (make-mongo-db m "errrecorderdb"))
+(define db (make-mongo-db m db-name))
 
 ; set the current mongo db to errrecorder db
 (current-mongo-db db)
@@ -50,39 +67,48 @@
 ; insert-error : str? str? str? -> nothing
 ; inserts error into errors collection
 (define (insert-error type time msg)
-  (local [(define (determine-group err log)
-            (let* ([err-tok (string-tokenize err)])
-              (if (empty? log)
-                  (get-nextgid type)
-                  (let* ([idxs (reverse (create-idx-list (first (get-maxgid type))))]
-                         [lvnshtns-avgs (map (λ (x y) (cons (lvnshtns-avg err-tok x) y)) log idxs)]
-                         [best (argmin car lvnshtns-avgs)]
-                         [best-lvnshtn (car best)]
-                         [best-idx (cdr best)])
-                    (if (<= best-lvnshtn lvnshtn-cutoff)
-                        best-idx
-                        (get-nextgid type))))))
-          
-          (define (lvnshtns-avg err-tok cg)
-            (let* ([cg-tok (map string-tokenize cg)]
-                   [lvnshtns (map (λ (x) (levenshtein/predicate err-tok x string=?)) cg-tok)]
-                   [mean (/ (foldl + 0 lvnshtns) (length lvnshtns))])
-              mean))
-          
-          (define (create-idx-list num)
-            (if (< num 0)
-                empty
-                (cons num (create-idx-list (- num 1)))))
-          
-          (define (create-log maxgid)
-            (if (empty? maxgid)
-                empty
-                (map (λ (x) (get-type-messages type x)) (reverse (create-idx-list (first maxgid))))))]
-    
-    (make-error #:type type
-                #:gid (determine-group msg (create-log (get-maxgid type)))
-                #:time time
-                #:msg msg)))
+  
+  (define (create-log maxgid)
+    (if (null? maxgid)
+        null
+        (for/list ([i (in-range (first maxgid))]) (get-type-messages type i))))
+  
+  (make-error #:type type
+              #:gid (determine-group type msg (create-log (get-maxgid type)))
+              #:time time
+              #:msg msg))
+
+
+;; determine what group an error belongs to
+;; ? ? ? -> ?
+(define (determine-group type err log)
+  (let* ([err-tok (string-tokenize err)])
+    (or (best-existing-below-threshold type err-tok log)
+        (get-nextgid type))))
+
+(define (best-existing-below-threshold type err-tok log)
+  (define evaluator (lvnshtns-avg err-tok))
+  (cond [(empty? log) #f]
+        [else
+         (match-let* ([paired (pair-with-ints log)]
+                      [(list errs idx avg) (argmin evaluator paired)])
+           (cond [(< (evaluator errs) lvnshtn-cutoff) idx]
+                 [else #f]))]))
+
+;; pair each element of the list with its index
+(define (pair-with-ints l)
+  (for/list ([a (in-list l)]
+             [b (in-naturals)])
+    (list a b)))
+
+
+;; determine the mean levenshtein distance to each of the elements in cg.
+;; string? (listof string?) -> number?
+(define ((lvnshtns-avg err-tok) cg)
+  (let* ([cg-tok (map string-tokenize cg)]
+         [lvnshtns (map (λ (x) (levenshtein/predicate err-tok x string=?)) cg-tok)]
+         [mean (/ (foldl + 0 lvnshtns) (length lvnshtns))])
+    mean))
 
 ; insert-solution : str? num? str? str? -> nothing
 ; inserts solution into solutions collection
@@ -98,7 +124,7 @@
 ; get-nextgid : str? -> num
 ; returns the next unique gid for the specified type
 (define (get-nextgid type)
-  (local [(define (inc-gid type gid)
+  (define (inc-gid type gid)
             (begin (mongo-collection-modify! nextgids-collection 
                                              (list (cons 'type type) (cons 'gid gid))
                                              (list (cons '$set (list (cons 'gid (+ 1 gid))))))
@@ -107,12 +133,11 @@
           (define (insert-nextgid type) 
             (begin (make-nextgid #:type type
                                  #:gid 0)
-                   0))]
-    
-    (let* ([gid-list (get-maxgid type)])
-      (if (empty? gid-list)
-          (insert-nextgid type)
-          (inc-gid type (first gid-list))))))
+                   0))
+  (let* ([gid-list (get-maxgid type)])
+    (if (empty? gid-list)
+        (insert-nextgid type)
+        (inc-gid type (first gid-list)))))
 
 
 ; get-maxgid : str? -> num
@@ -167,11 +192,3 @@
                                                                       0
                                                                       (- (fourth solution) 1))))))))
 
-(provide insert-error
-         insert-solution
-         get-all-types
-         get-type-messages
-         get-solutions
-         get-gid
-         upvote
-         downvote)
