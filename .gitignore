@@ -1,1 +1,4 @@
 compiled/
+log
+#backup files
+*~
