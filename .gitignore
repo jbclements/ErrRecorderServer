@@ -2,3 +2,5 @@ compiled/
 log
 #backup files
 *~
+# server-specific start script:
+start-web-server.rkt
