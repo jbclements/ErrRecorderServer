@@ -1,35 +1,100 @@
-#lang racket/unit
+#lang racket
 
 (require racket/date
          racket/list
          racket/match
+         racket/class
          srfi/13
-         "signatures.rkt"
          (planet neil/levenshtein:1:3)
          (planet jaymccarthy/mongodb:1:7))
 
-(import db-name^)
-(export errrecorder-db^)
+(provide db-connection%)
+
+(define db-connection%
+  (class object%
+    (init-field db-name)
+    
+    (super-new)
+    
+    ; the mongodb connection
+    (define m (create-mongo))
+
+    ; errrecorder mongo db
+    (define db (make-mongo-db m db-name))
+
+    ; create/define needed collections:
+    (define solutions-collection (make-mongo-collection db "solutions"))
+    (define errors-collection (make-mongo-collection db "errors"))
+    (define nextgids-collection (make-mongo-collection db "nextgids"))
+    
+
+    
+    ; insert-error : str? str? str? -> nothing
+    ; inserts error into errors collection
+    (define (insert-error type time msg)
+      
+      (define (create-log maxgid)
+        (if (null? maxgid)
+            null
+            (for/list ([i (in-range (first maxgid))]) (get-type-messages type i))))
+      
+      (parameterize ([current-mongo-db db])
+        ;; this really seems like a mis-use of the dict interface...
+        (make-error #:type type
+                    #:gid (determine-group type msg (create-log (get-maxgid type)))
+                    #:time time
+                    #:msg msg)))
+    
+    
+    
+    ; insert-solution : str? num? str? str? -> nothing
+    ; inserts solution into solutions collection
+    (define (insert-solution type gid text author) 
+      (when (and (> (string-length text) 0) (> (string-length author) 0))
+        (parameterize ([current-mongo-db db])
+          (make-solution #:type type
+                         #:gid gid
+                         #:time (number->string (current-seconds))
+                         #:text text
+                         #:author author
+                         #:rating 0))))
+    
+    ; get-all-types :  -> (listof (listof str? num?))
+    ; returns the type and gid every error in the errors collection.
+    ;; should this really be public?
+    (define/public (get-all-types)
+      (for/list ([e (mongo-collection-find errors-collection (list))]) 
+        (list (hash-ref e 'type) (hash-ref e 'gid))))
+    
+    
+    ; get-type-messages : str? num? -> (listof str?)
+    ; returns a list of every message for a given type+gid in the errors collection
+    (define/public (get-type-messages type gid)
+      (for/list ([e (mongo-collection-find errors-collection 
+                                           (list (cons 'type type) (cons 'gid gid)))]) 
+        (hash-ref e 'msg)))
+     
+    ; get-solutions : str? num? -> (listof solution)
+    ; returns a list of every proposed solution for a given type+gid in the solutions collection
+    (define (get-solutions type gid)
+      (for/list ([e (mongo-collection-find 
+                     solutions-collection
+                     (list (cons 'type type) (cons 'gid gid)))]) 
+        (list (hash-ref e 'time) (hash-ref e 'text) (hash-ref e 'author) (hash-ref e 'rating))))
+    
+    ; get-gid : str? str? -> (listof num?)
+    ; returns a gid for a given type+msg in the errors collection
+    (define (get-gid type msg)
+      (for/list ([e (mongo-collection-find errors-collection
+                                           (list (cons 'type type) (cons 'msg msg)))]) 
+        (hash-ref e 'gid)))
+    
+    (define/public (upvote!) 3)
+    
+    (define/public (downvote!) 3)
+    ))
 
 
-#;(provide insert-error
-         insert-solution
-         get-all-types
-         get-type-messages
-         get-solutions
-         get-gid
-         upvote
-         downvote)
-
-
-; the mongodb connection
-(define m (create-mongo))
-
-; errrecorder mongo db
-(define db (make-mongo-db m db-name))
-
-; set the current mongo db to errrecorder db
-(current-mongo-db db)
 
 ; the levenshtein cutoff for making a group
 (define lvnshtn-cutoff 3)
@@ -55,28 +120,7 @@
    [time]
    [msg]))
 
-; create/define solutions collection
-(define solutions-collection (make-mongo-collection db "solutions"))
 
-; create/define errors collection
-(define errors-collection (make-mongo-collection db "errors"))
-
-; create/define nextgids collection
-(define nextgids-collection (make-mongo-collection db "nextgids"))
-
-; insert-error : str? str? str? -> nothing
-; inserts error into errors collection
-(define (insert-error type time msg)
-  
-  (define (create-log maxgid)
-    (if (null? maxgid)
-        null
-        (for/list ([i (in-range (first maxgid))]) (get-type-messages type i))))
-  
-  (make-error #:type type
-              #:gid (determine-group type msg (create-log (get-maxgid type)))
-              #:time time
-              #:msg msg))
 
 
 ;; determine what group an error belongs to
@@ -110,16 +154,7 @@
          [mean (/ (foldl + 0 lvnshtns) (length lvnshtns))])
     mean))
 
-; insert-solution : str? num? str? str? -> nothing
-; inserts solution into solutions collection
-(define (insert-solution type gid text author) 
-  (when (and (> (string-length text) 0) (> (string-length author) 0))
-    (make-solution #:type type
-                   #:gid gid
-                   #:time (number->string (current-seconds))
-                   #:text text
-                   #:author author
-                   #:rating 0)))
+
 
 ; get-nextgid : str? -> num
 ; returns the next unique gid for the specified type
@@ -164,17 +199,9 @@
   (for/list ([e (mongo-collection-find errors-collection (list (cons 'type type) (cons 'gid gid)))]) 
     (hash-ref e 'msg)))
 
-; get-gid : str? str? -> (listof num?)
-; returns a gid for a given type+msg in the errors collection
-(define (get-gid type msg)
-  (for/list ([e (mongo-collection-find errors-collection (list (cons 'type type) (cons 'msg msg)))]) 
-    (hash-ref e 'gid)))
 
-; get-solutions : str? num? -> (listof solution)
-; returns a list of every proposed solution for a given type+gid in the solutions collection
-(define (get-solutions type gid)
-  (for/list ([e (mongo-collection-find solutions-collection (list (cons 'type type) (cons 'gid gid)))]) 
-    (list (hash-ref e 'time) (hash-ref e 'text) (hash-ref e 'author) (hash-ref e 'rating))))
+
+
 
 ; upvote : str? num? solution -> nothing
 ; adds 1 to the rating of a solution in the solutions collection
