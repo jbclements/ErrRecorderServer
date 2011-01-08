@@ -49,7 +49,7 @@
     
     ; insert-solution : str? num? str? str? -> nothing
     ; inserts solution into solutions collection
-    (define (insert-solution type gid text author) 
+    (define/public (insert-solution type gid text author) 
       (when (and (> (string-length text) 0) (> (string-length author) 0))
         (parameterize ([current-mongo-db db])
           (make-solution #:type type
@@ -76,7 +76,7 @@
      
     ; get-solutions : str? num? -> (listof solution)
     ; returns a list of every proposed solution for a given type+gid in the solutions collection
-    (define (get-solutions type gid)
+    (define/public (get-solutions type gid)
       (for/list ([e (mongo-collection-find 
                      solutions-collection
                      (list (cons 'type type) (cons 'gid gid)))]) 
@@ -89,40 +89,27 @@
                                            (list (cons 'type type) (cons 'msg msg)))]) 
         (hash-ref e 'gid)))
     
-    (define/public (upvote!) 3)
     
-    (define/public (downvote!) 3)
-    ))
-
-
-
-; the levenshtein cutoff for making a group
-(define lvnshtn-cutoff 3)
-
-; an instance of the solutions mongo collection
-(define-mongo-struct solution "solutions"
-  ([type]
-   [gid]
-   [time]
-   [text]
-   [author]
-   [rating]))
-
-; an instance of the nextgids mongo collection
-(define-mongo-struct nextgid "nextgids"
-  ([type]
-   [gid]))
-
-; an instance of the errors mongo collection
-(define-mongo-struct error "errors"
-  ([type]
-   [gid]
-   [time]
-   [msg]))
-
-
-
-
+    ; get-nextgid : str? -> num
+    ; returns the next unique gid for the specified type
+    (define (get-nextgid type)
+      (define (inc-gid type gid)
+        (begin (mongo-collection-modify! nextgids-collection 
+                                         (list (cons 'type type) (cons 'gid gid))
+                                         (list (cons '$set (list (cons 'gid (+ 1 gid))))))
+               (+ 1 gid)))
+      
+      (define (insert-nextgid type) 
+        (begin (make-nextgid #:type type
+                             #:gid 0)
+               0))
+      (let* ([gid-list (get-maxgid type)])
+        (if (empty? gid-list)
+            (insert-nextgid type)
+            (inc-gid type (first gid-list)))))
+    
+    
+    
 ;; determine what group an error belongs to
 ;; ? ? ? -> ?
 (define (determine-group type err log)
@@ -156,66 +143,70 @@
 
 
 
-; get-nextgid : str? -> num
-; returns the next unique gid for the specified type
-(define (get-nextgid type)
-  (define (inc-gid type gid)
-            (begin (mongo-collection-modify! nextgids-collection 
-                                             (list (cons 'type type) (cons 'gid gid))
-                                             (list (cons '$set (list (cons 'gid (+ 1 gid))))))
-                   (+ 1 gid)))
-          
-          (define (insert-nextgid type) 
-            (begin (make-nextgid #:type type
-                                 #:gid 0)
-                   0))
-  (let* ([gid-list (get-maxgid type)])
-    (if (empty? gid-list)
-        (insert-nextgid type)
-        (inc-gid type (first gid-list)))))
 
 
-; get-maxgid : str? -> num
-; returns the max gid for the specified type
-(define (get-maxgid type)
-  (for/list ([e (mongo-collection-find nextgids-collection (list (cons 'type type)))]) 
-    (hash-ref e 'gid)))
-
-; get-all-types : str? -> (listof (listof str? num?))
-; returns every error in the errors collection
-(define (get-all-types)
-  (for/list ([e (mongo-collection-find errors-collection (list))]) 
-    (list (hash-ref e 'type) (hash-ref e 'gid))))
-
-; get-type : str? -> (listof str?)
-; returns a list of every instance of a type in the errors collection
-(define (get-type type)
-  (for/list ([e (mongo-collection-find errors-collection (list))]) 
-    (list (hash-ref e 'msg) (hash-ref e 'gid))))
-
-; get-type-messages : str? num? -> (listof str?)
-; returns a list of every message for a given type+gid in the errors collection
-(define (get-type-messages type gid)
-  (for/list ([e (mongo-collection-find errors-collection (list (cons 'type type) (cons 'gid gid)))]) 
-    (hash-ref e 'msg)))
+    ; get-maxgid : str? -> num
+    ; returns the max gid for the specified type
+    (define (get-maxgid type)
+      (for/list ([e (mongo-collection-find nextgids-collection (list (cons 'type type)))]) 
+        (hash-ref e 'gid)))
+    
+    ; get-type : str? -> (listof str?)
+    ; returns a list of every instance of a type in the errors collection
+    (define (get-type type)
+      (for/list ([e (mongo-collection-find errors-collection (list))]) 
+        (list (hash-ref e 'msg) (hash-ref e 'gid))))
+    
+    
+    ; upvote! : str? num? solution ->
+    ; adds 1 to the rating of a solution in the solutions collection
+    (define/public (upvote! type gid solution)
+      (mongo-collection-modify! 
+       solutions-collection 
+       (list (cons 'type type) (cons 'gid gid) (cons 'time (first solution)) (cons 'text (second solution)))
+       (list (cons '$set (list (cons 'rating (+ 1 (fourth solution))))))))
+    
+    ; downvote! : str? num? solution -> 
+    ; subtracts 1 to the rating of a solution in the solutions collection
+    (define (downvote type gid solution)
+      (mongo-collection-modify! 
+       solutions-collection 
+       `((type . ,type) 
+         (gid . ,gid) 
+         (time . ,(first solution))
+         (text . ,(second solution)))
+       `(($set ((rating . ,(if (= (fourth solution) 0)
+                               0
+                               (- (fourth solution) 1))))))))
+    ))
 
 
 
+; the levenshtein cutoff for making a group
+(define lvnshtn-cutoff 3)
+
+; an instance of the solutions mongo collection
+(define-mongo-struct solution "solutions"
+  ([type]
+   [gid]
+   [time]
+   [text]
+   [author]
+   [rating]))
+
+; an instance of the nextgids mongo collection
+(define-mongo-struct nextgid "nextgids"
+  ([type]
+   [gid]))
+
+; an instance of the errors mongo collection
+(define-mongo-struct error "errors"
+  ([type]
+   [gid]
+   [time]
+   [msg]))
 
 
-; upvote : str? num? solution -> nothing
-; adds 1 to the rating of a solution in the solutions collection
-(define (upvote type gid solution)
-  (mongo-collection-modify! solutions-collection 
-                            (list (cons 'type type) (cons 'gid gid) (cons 'time (first solution)) (cons 'text (second solution)))
-                            (list (cons '$set (list (cons 'rating (+ 1 (fourth solution))))))))
 
-; downvote : str? num? solution -> nothing
-; subtracts 1 to the rating of a solution in the solutions collection
-(define (downvote type gid solution)
-  (mongo-collection-modify! solutions-collection 
-                            (list (cons 'type type) (cons 'gid gid) (cons 'time (first solution)) (cons 'text (second solution)))
-                            (list (cons '$set (list (cons 'rating (if (= (fourth solution) 0)
-                                                                      0
-                                                                      (- (fourth solution) 1))))))))
+
 

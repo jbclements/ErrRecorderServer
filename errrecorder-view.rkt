@@ -7,6 +7,8 @@
          srfi/14
          "errrecorder-model.rkt")
 
+(define db-conn (new db-connection% [db-name "errrecorderdb"]))
+
 ; render-page : request? -> any
 ; determines which page to render
 (define (render-page request)
@@ -21,23 +23,25 @@
   (let* ([binds (request-bindings request)]
          [type (form-urlencoded-decode (extract-binding/single 'type binds))]
          [msg (form-urlencoded-decode (extract-binding/single 'msg binds))]
-         [gid (first (get-gid type msg))])
+         [gid (first (send db-conn get-gid type msg))])
     (render-group-page request type gid)))
 
 ; render-summary-page : request? -> html-response
 ; generate summary/home page
 (define (render-summary-page request)
   (local [(define (response-generator make-url)
-            (let* ([query-results (get-all-types)]
+            (let* ([query-results (send db-conn get-all-types)]
                    [total (length query-results)]
                    [groups (count-groups query-results)]
                    [groups-ranked (sort groups (λ(x y) (> (third x) (third y))))])
+              (response/xexpr
               `(html (head (title "ErrRecorder"))
                      (link ((rel "stylesheet")
                             (href "/errrecorder-style-sheet.css")
                             (type "text/css")))
                      (body
-                      (a ((href "http://li21-127.members.linode.com:8021/errrecorder")) (img ((src "errrecorder-logo.png"))))
+                      (a ((href "http://li21-127.members.linode.com:8021/errrecorder")) 
+                         (img ((src "errrecorder-logo.png"))))
                       (p "Total Errors Submitted: " (b ,(format "~a" total)))
                       (div ((id "whatis"))
                            (h3 ((id "whatis-h3")) "What is ErrRecorder?")
@@ -48,7 +52,7 @@
                                              "contribute solutions.  In DrRacket, a user can be "
                                              "taken to an error's page by clicking on the magnifying "
                                              "glass icon next to the error.")))
-                      ,(render-groups make-url groups-ranked total)))))
+                      ,(render-groups make-url groups-ranked total))))))
           
           (define (count-groups qr)
             (if (empty? qr)
@@ -86,7 +90,7 @@
     (let* ([exn-type (first group)]
            [gid (second group)]
            [count (third group)]
-           [exn-msg (last (get-type-messages exn-type gid))]
+           [exn-msg (last (send db-conn get-type-messages exn-type gid))]
            [per-str (format "~a" (exact->inexact (* 100 (/ count total))))]
            [per-str-len (string-length per-str)]
            [percent (substring per-str 0 (if (> per-str-len 5) 5 per-str-len))])
@@ -98,44 +102,47 @@
 ; render-group-page : request? str? num? -> html-response
 ; generates type page for the specified group
 (define (render-group-page request type gid)
-  (local [(define (response-generator make-url)
-            `(html (head (title ,(format "~a Page" type)))
-                   (link ((rel "stylesheet")
-                          (href "/errrecorder-style-sheet.css")
-                          (type "text/css")))
-                   (body
-                    (a ((href ,(make-url back-handler))) "Back")
-                    (h1 ,type)
-                    (h2 "Recent Example Exception Messages:")
-                    ,(render-example-messages type gid)
-                    (h2 "Solutions:")
-                    ,(render-solutions make-url type gid)
-                    (h2 "Propose Solution:")
-                    (div ((id "solution-form"))
-                         (form ((action ,(make-url insert-solution-handler)))
-                               "Author: " (input ((type "text") (value "Anonymous") (name "author"))) (br) (br)
-                               "Solution: " (br) (textarea ((rows "10") (cols "30") (name "text")) "") (br)
-                               (input ((type "submit") (value "Submit"))))))))
-          
-          (define (back-handler request)
-            (render-summary-page request))
-          
-          (define (insert-solution-handler request)
-            (begin
-              (insert-solution type 
-                               gid
-                               (extract-binding/single 'text (request-bindings request)) 
-                               (extract-binding/single 'author (request-bindings request)))
-              (render-group-page (redirect/get) type gid)))]
-    
-    (send/suspend/dispatch response-generator)))
+  (define (response-generator make-url)
+    (response/xexpr
+     `(html (head (title ,(format "~a Page" type)))
+            (link ((rel "stylesheet")
+                   (href "/errrecorder-style-sheet.css")
+                   (type "text/css")))
+            (body
+             (a ((href ,(make-url back-handler))) "Back")
+             (h1 ,type)
+             (h2 "Recent Example Exception Messages:")
+             ,(render-example-messages type gid)
+             (h2 "Solutions:")
+             ,(render-solutions make-url type gid)
+             (h2 "Propose Solution:")
+             (div ((id "solution-form"))
+                  (form ((action ,(make-url insert-solution-handler)))
+                        "Author: " (input ((type "text") (value "Anonymous") (name "author"))) (br) (br)
+                        "Solution: " (br) (textarea ((rows "10") (cols "30") (name "text")) "") (br)
+                        (input ((type "submit") (value "Submit")))))))))
+  
+  (define (back-handler request)
+    (render-summary-page request))
+  
+  (define (insert-solution-handler request)
+    (begin
+      (send db-conn
+            insert-solution
+            type 
+            gid
+            (extract-binding/single 'text (request-bindings request)) 
+            (extract-binding/single 'author (request-bindings request)))
+      (render-group-page (redirect/get) type gid)))
+  
+  (send/suspend/dispatch response-generator))
 
 ; render-solutions : make-response str? num? -> html-response
 ; generates proposed solutions for this group
 (define (render-solutions make-url type gid)
   (local [(define (render-solution/make-url solution)
             (render-solution make-url solution type gid))]
-    (let* ([solutions (get-solutions type gid)]
+    (let* ([solutions (send db-conn get-solutions type gid)]
            [sorted-solutions (sort solutions (λ (x y) (if (= (fourth x) (fourth y))
                                                           (> (string->number (first x)) (string->number (first y)))
                                                           (> (fourth x) (fourth y)))))]
@@ -149,11 +156,11 @@
 ; generates a specific solution for this group
 (define (render-solution make-url solution type gid)
   (local [(define (upvote-handler request)
-            (upvote type gid solution)
+            (send db-conn upvote! type gid solution)
             (render-group-page (redirect/get) type gid))
           
           (define (downvote-handler request)
-            (downvote type gid solution)
+            (send db-conn downvote! type gid solution)
             (render-group-page (redirect/get) type gid))]
     (let* ([time (first solution)]
            [text (second solution)]
@@ -182,7 +189,7 @@
 ; render-example-messages : str? num? -> html-response
 ; generates a list of up to 5 example messages for this group
 (define (render-example-messages type gid)
-  (let* ([messages (get-type-messages type gid)]
+  (let* ([messages (send db-conn get-type-messages type gid)]
          [total (length messages)]
          [display-messages (reverse (list-tail messages (if (> total 5) (- total 5) 0)))])
     `(ul ,@(map (λ (m) `(li ,m)) display-messages))))
@@ -194,8 +201,9 @@
          [type (bytes->string/utf-8 (binding:form-value (bindings-assq #"type" bindings)))]
          [time (bytes->string/utf-8 (binding:form-value (bindings-assq #"time" bindings)))]
          [msg (bytes->string/utf-8 (binding:form-value (bindings-assq #"msg" bindings)))])
-    (insert-error type time msg)
-    "Got it!"))
+    (send db-conn insert-error type time msg)
+    (response/xexpr
+     '(success))))
 
 (provide post-error 
          render-page)
