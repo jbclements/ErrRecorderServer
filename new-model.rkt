@@ -15,7 +15,7 @@
 
 
 ; the mongodb connection
-(define m (create-mongo))
+(define m (create-mongo #:host "li21-127.members.linode.com"))
 
 ; errrecorder mongo db
 (define db (make-mongo-db m db-name))
@@ -41,7 +41,7 @@
   
   (parameterize ([current-mongo-db db])
     (make-error #:type type
-                #:group (id-of group)
+                #:group-id (id-of group)
                 #:time time
                 #:msg msg)))
 
@@ -52,7 +52,7 @@
   (when (and (> (string-length text) 0) (> (string-length author) 0))
     (parameterize ([current-mongo-db db])
       (make-solution #:type (dict-ref group 'type)
-                     #:group (id-of group)
+                     #:group-id (id-of group)
                      #:time (number->string (current-seconds))
                      #:text text
                      #:author author
@@ -65,7 +65,7 @@
   (for/list ([group (mongo-collection-find groups-collection `())])
     (list group 
           (mongo-collection-count errors-collection
-                                  `((group . ,(id-of group)))))))
+                                  `((group-id . ,(id-of group)))))))
 
 ;; get-all-types : -> (listof string?)
 ;; return a list of all the types that occur in the errors
@@ -79,7 +79,7 @@
 ; returns a list of every message for a given type+gid in the errors collection
 (define (group->messages group)
   (for/list ([e (mongo-collection-find errors-collection 
-                                       `((group . ,(id-of group))))]) 
+                                       `((group-id . ,(id-of group))))]) 
     (hash-ref e 'msg)))
 
 
@@ -88,7 +88,7 @@
 (define (group->solutions group)
   (for/list ([e (mongo-collection-find 
                  solutions-collection
-                 `((group . ,(id-of group))))])
+                 `((group-id . ,(id-of group))))])
     e))
 
 ; upvote! : solution ->
@@ -108,7 +108,7 @@
    `(($inc . ((rating . -1))))))
 
 (define (solution->group solution)
-  (id->group (dict-ref solution 'group)))
+  (id->group (dict-ref solution 'group-id)))
 
 ;; type->groups : string? -> (listof group?)
 (define (type->groups type)
@@ -150,14 +150,18 @@
   (define-values (more? get!) (sequence-generate matching))
   (unless (more?) (error 'group-find "didn't find any matching errors"))
   (define the-error (get!))
-  (id->group (dict-ref the-error 'group)))
+  (id->group (dict-ref the-error 'group-id)))
 
 ;; string? (listof string?) cursor? -> (or/c false id)
 (define (best-existing-below-threshold type err-tok groups)
-  (define evaluator (lvnshtns-avg err-tok))
+  #;(define evaluator (lvnshtns-avg err-tok))
   (define (group->score g)
-    (define errors (mongo-collection-find errors-collection `((group . ,(id-of g)))))
-    (evaluator errors))
+    ;; for now, we're going to try just comparing to the message stored in the group.
+    ;; this should be *much* faster, and will probably give similar results.
+    (define group-msg (dict-ref g 'msg))
+    (levenshtein/predicate err-tok (string-tokenize group-msg) string=?)
+    #;(define errors (mongo-collection-find errors-collection `((group-id . ,(id-of g)))))
+    #;(evaluator errors))
   (define with-scores (for/list ([g groups])
                         (list g (group->score g))))
   (cond [(empty? with-scores) #f]
@@ -189,7 +193,7 @@
 ; an instance of the solutions mongo collection
 (define-mongo-struct solution "solutions"
   ([type]
-   [group]
+   [group-id]
    [time]
    [text]
    [author]
@@ -201,7 +205,7 @@
 
 (define-mongo-struct error "errors"
   ([type]
-   [group]
+   [group-id]
    [time]
    [msg]))
 
