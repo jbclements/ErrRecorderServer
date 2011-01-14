@@ -2,7 +2,10 @@
 
 (require web-server/servlet
          web-server/servlet-env
+         racket/runtime-path
          "errrecorder-view.rkt")
+
+(define-runtime-path here ".")
 
 ; contract for request
 (provide/contract (start (request? . -> . any/c)))
@@ -21,5 +24,5 @@
                #:listen-ip #f
                #:port 8021
                #:servlet-path "/errrecorder"
-               #:extra-files-paths (list (build-path "/home/jtrobins/errrecorder-server/errrecorder-docs")
-                                         (build-path "/home/jtrobins/errrecorder-server/errrecorder-images")))
+               #:extra-files-paths (list (build-path here "errrecorder-docs")
+                                         (build-path here "errrecorder-images")))
