@@ -9,7 +9,7 @@
          "signatures.rkt"
          "naming.rkt")
 
-(define db-name "errrecorderdb3")
+(define db-name "errrecorderdb")
 
 (define-values/invoke-unit new-model@
   (import db-name^)
