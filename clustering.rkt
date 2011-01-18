@@ -1,6 +1,6 @@
 #lang racket
 
-(require "new-model.rkt"
+(require "model.rkt"
          "signatures.rkt"
          srfi/13
          (planet neil/levenshtein:1:3)
@@ -10,7 +10,7 @@
 
 (define db-name "errrecorderdb2")
 
-(define-values/invoke-unit new-model@
+(define-values/invoke-unit model@
   (import db-name^)
   (export db-funs^))
 

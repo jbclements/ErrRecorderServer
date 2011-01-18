@@ -13,9 +13,43 @@
 (import db-name^)
 (export db-funs^)
 
+;; what does the database look like?
+;;
+;; an error has 
+;; - a type (string, e.g. "exn:fail")
+;; - a group-id, the Mongo ID of a group
+;; - a time, in seconds since epoch, and
+;; - a msg, the exn-message string
+(define-mongo-struct error "errors"
+  ([type]
+   [group-id]
+   [time]
+   [msg]))
+
+;; a group has
+;; - a type (string, e.g. "exn:fail")
+;; - a message, the string associated with the
+;;   error that caused the creation of the group.
+(define-mongo-struct group "groups"
+  ([type]
+   [msg]))
+
+;; 
+(define-mongo-struct solution "solutions"
+  ([type]
+   [group-id]
+   [time]
+   [text]
+   [author]
+   [rating]))
+
+
+
+
+
 
 ; the mongodb connection
-(define m (create-mongo #:host "li21-127.members.linode.com"))
+(define m (create-mongo))
 
 ; errrecorder mongo db
 (define db (make-mongo-db m db-name))
@@ -189,26 +223,6 @@
 
 ; the levenshtein cutoff for making a group
 (define lvnshtn-cutoff 3)
-
-; an instance of the solutions mongo collection
-(define-mongo-struct solution "solutions"
-  ([type]
-   [group-id]
-   [time]
-   [text]
-   [author]
-   [rating]))
-
-(define-mongo-struct group "groups"
-  ([type]
-   [msg]))
-
-(define-mongo-struct error "errors"
-  ([type]
-   [group-id]
-   [time]
-   [msg]))
-
 
 ;; get the '_id field of a doc
 (define (id-of doc)

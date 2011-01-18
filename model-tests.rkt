@@ -1,13 +1,13 @@
 #lang racket
 
 (require "signatures.rkt"
-         "new-model.rkt"
+         "model.rkt"
          rackunit)
 
 
 (define db-name "testing")
 
-(define-values/invoke-unit new-model@
+(define-values/invoke-unit model@
   (import db-name^)
   (export db-funs^))
 
@@ -23,7 +23,7 @@
 (check-equal? (second (first query)) 2)
 
 ;; add one with a different type
-(error-insert! "exn:bogotype2" 348 "I am a frog")
+(define dc1 (error-insert! "exn:bogotype2" 348 "I am a frog"))
 
 (define query2 (get-all-groups-with-frequency))
 (check-equal? (length query2) 2)
@@ -34,13 +34,15 @@
 
 (define first-group (first (first query)))
 
-(solution-insert! first-group "Stop being a frog" "Mr. Helpful")
+(define dc2 
+  (solution-insert! first-group "Stop being a frog" "Mr. Helpful"))
 
 (let ([solutions (group->solutions first-group)])
   (check-equal? (length solutions) 1)
   (check-equal? (dict-ref (first solutions) 'text) "Stop being a frog"))
 
-(solution-insert! first-group "Learn to enjoy being a frog" "Bob")
+(define dc3
+  (solution-insert! first-group "Learn to enjoy being a frog" "Bob"))
 
 (let ([solutions (group->solutions first-group)])
   (check-equal? (length solutions) 2)
@@ -55,43 +57,6 @@
   (let ([reloaded (first (group->solutions first-group))])
     (check-equal? (dict-ref reloaded 'rating) 1)))
 
-(check-exn exn:fail? (lambda () (group-find "exn:bogotype" "new error message")))
+(check-exn exn:fail? 
+           (lambda () (group-find "exn:bogotype" "new error message")))
   
-#|
-(require (planet jaymccarthy/mongodb:1:7))
-
-; the mongodb connection
-(define m (create-mongo))
-
-; errrecorder mongo db
-(define db (make-mongo-db m "testing"))
-
-
-; create/define needed collections:
-(define errs (make-mongo-collection db "errors"))
-(define groups (make-mongo-collection db "groups"))
-
-(mongo-collection-remove! (make-mongo-collection db "groups") '())
-
-(current-mongo-db db)
-(define-mongo-struct group "groups"
-  ([name]))
-
-(define g (make-group #:name "happygroup"))
-
-(for/list ([i (mongo-collection-find groups '())])
-  i)
-
-|#
-#|
-(define newgroups (list `((_id . (new-bson-objectid)) (name . "happygroup"))
-                        `((name . "sadgroup"))))
-
-(for ([g (in-list newgroups)])
-  (mongo-collection-insert-one! groups g))
-
-(for/list ([i (mongo-collection-find groups '())])
-  i)
-|#
-    
-

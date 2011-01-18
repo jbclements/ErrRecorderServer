@@ -5,13 +5,13 @@
          net/uri-codec
          srfi/13
          srfi/14
-         "new-model.rkt"
+         "model.rkt"
          "signatures.rkt"
          "naming.rkt")
 
-(define db-name "errrecorderdb3")
+(define db-name "errrecorderdb")
 
-(define-values/invoke-unit new-model@
+(define-values/invoke-unit model@
   (import db-name^)
   (export db-funs^))
 
@@ -36,7 +36,10 @@
 ; generate summary/home page
 (define (render-summary-page request)
   (define (response-generator make-url)
-    (define groups-and-counts (sort (get-all-groups-with-frequency) > #:key second))
+    (time
+     (let ()
+      
+    (define groups-and-counts (sort (time (get-all-groups-with-frequency)) > #:key second))
     (define total (apply + (map second groups-and-counts)))
     (response/xexpr
      `(html (head (title "ErrRecorder"))
@@ -44,7 +47,7 @@
                    (href "/errrecorder-style-sheet.css")
                    (type "text/css")))
             (body
-             (a ((href "http://li21-127.members.linode.com:8021/errrecorder")) 
+             (a ((href "/errrecorder")) 
                 (img ((src "errrecorder-logo.png"))))
              (p "Total Errors Submitted: " (b ,(format "~a" total)))
              (div ((id "whatis"))
@@ -56,7 +59,7 @@
                                     "contribute solutions.  In DrRacket, a user can be "
                                     "taken to an error's page by clicking on the magnifying "
                                     "glass icon next to the error.")))
-             ,(render-groups make-url groups-and-counts total)))))
+             ,(render-groups make-url groups-and-counts total)))))))
   
   (send/suspend/dispatch response-generator))
 

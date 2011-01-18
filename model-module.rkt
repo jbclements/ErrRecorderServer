@@ -1,7 +1,7 @@
 #lang racket
 
 (require "signatures.rkt"
-         "new-model.rkt")
+         "model.rkt")
 
 (define db-name "errrecorderdb2")
 
