@@ -2,6 +2,7 @@
 
 (require web-server/servlet
          web-server/servlet-env
+         racket/date
          "signatures.rkt"
          "model.rkt")
 
@@ -16,19 +17,12 @@
 ; contract for request
 (provide/contract (start (request? . -> . any/c)))
 
-; start : request? -> (or any nothing)
-; start location of servlet:
-; either sends error to db or generates summary html-page
-(define (start request) 
-  (post-error request))
-
-
 ; post-error : request? -> nothing
 ; sends error off to errors collection in errrecorder mongo db
-(define (post-error request)
+(define (start request)
   (let* ([bindings (request-bindings/raw request)]
+         [time (number->string (current-seconds))]
          [type (bytes->string/utf-8 (binding:form-value (bindings-assq #"type" bindings)))]
-         [time (bytes->string/utf-8 (binding:form-value (bindings-assq #"time" bindings)))]
          [msg (bytes->string/utf-8 (binding:form-value (bindings-assq #"msg" bindings)))])
     (error-insert! type time msg)
     (response/xexpr

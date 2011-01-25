@@ -3,7 +3,7 @@
 (require net/url
          net/uri-codec)
 
-(define db-host "localhost"#;"li21-127.members.linode.com")
+(define db-host "li21-127.members.linode.com")
 (define db-submit-port 8022)
 (define db-query-port 8021)
 

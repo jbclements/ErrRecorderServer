@@ -19,6 +19,10 @@
   (import db-name^)
   (export db-funs^))
 
+;; if fewer than 'group-threshold' errors occur in a group,
+;; don't show it in the main list
+(define group-threshold 10)
+
 ; render-page : request? -> any
 ; determines which page to render
 (define (render-page request)
@@ -31,8 +35,10 @@
 ; determines which group page to render
 (define (determine-group-page request)
   (let* ([binds (request-bindings request)]
-         [type (form-urlencoded-decode (extract-binding/single 'type binds))]
-         [msg (form-urlencoded-decode (extract-binding/single 'msg binds))]
+         [type (form-urlencoded-decode 
+                (extract-binding/single 'type binds))]
+         [msg (form-urlencoded-decode 
+               (extract-binding/single 'msg binds))]
          [group (group-find type msg)])
     (render-group-page request group)))
 
@@ -43,7 +49,8 @@
     (time
      (let ()
       
-    (define groups-and-counts (sort (time (get-all-groups-with-frequency)) > #:key second))
+    (define groups-and-counts (sort (time (get-all-groups-with-frequency))
+                                    > #:key second))
     (define total (apply + (map second groups-and-counts)))
     (response/xexpr
      `(html (head (title "ErrRecorder"))
@@ -57,12 +64,13 @@
              (div ((id "whatis"))
                   (h3 ((id "whatis-h3")) "What is ErrRecorder?")
                   (p ((id "whatis-p")) 
-                     (string-append "ErrRecorder is a DrRacket collection that records "
-                                    "errors received by users while programming in Dr. "
-                                    "Racket.  It groups like errors and allows users to "
-                                    "contribute solutions.  In DrRacket, a user can be "
-                                    "taken to an error's page by clicking on the magnifying "
-                                    "glass icon next to the error.")))
+                     (string-append 
+                      "ErrRecorder is a DrRacket collection that records "
+                      "errors received by users while programming in Dr. "
+                      "Racket.  It groups like errors and allows users to "
+                      "contribute solutions.  In DrRacket, a user can be "
+                      "taken to an error's page by clicking on the magnifying "
+                      "glass icon next to the error.")))
              ,(render-groups make-url groups-and-counts total)))))))
   
   (send/suspend/dispatch response-generator))
@@ -72,7 +80,8 @@
 (define (render-groups make-url groups total-count)
   (if (> total-count 0)
       `(div ((id "groups"))
-            ,@(map (render-group make-url total-count) groups))
+            ,@(map (render-group make-url total-count)
+                   (filter larger-than-threshold groups)))
       `(p "No Errors in ErrRecorder Database.")))
 
 ; render-group : make-response num? -> group -> html-response
@@ -158,11 +167,17 @@
          [rating (dict-ref solution 'rating)])
     `(div ((id "solution"))
           ,(insert-solution-text text)
-          (p "Submitted at " (b ,(format "~a" (date->string (seconds->date (string->number time)) #t))) " by " (b ,(format "~a." author)))
+          (p "Submitted at " 
+             (b ,(format "~a" 
+                         (date->string 
+                          (seconds->date (string->number time)) #t)))
+             " by " (b ,(format "~a." author)))
           (p "Rating: " 
-             (a ((href ,(make-url upvote-handler))) (img ((src "up_arrow.jpg"))))
+             (a ((href ,(make-url upvote-handler)))
+                (img ((src "up_arrow.jpg"))))
              (b ,(format "  ~a  " rating))
-             (a ((href ,(make-url downvote-handler))) (img ((src "down_arrow.jpg")))) 
+             (a ((href ,(make-url downvote-handler)))
+                (img ((src "down_arrow.jpg")))) 
              (br))
           (hr))))
 
@@ -199,6 +214,10 @@
     " ")))
 
 #;(equal? (assemble-name `("a" "b" #f "c")) "a b * c")
+
+;; (list/c group? number?) -> boolean?
+(define (larger-than-threshold group-and-freq)
+  (<= group-threshold (second group-and-freq)))
 
 
 ;; GET RID OF THIS AS SOON AS THIS SERVER IS ONLY HANDLING QUERIES:

@@ -1,8 +1,6 @@
 #lang racket/unit
 
-(require racket/date
-         racket/list
-         racket/match
+(require racket/list
          racket/dict
          srfi/13
          (planet neil/levenshtein:1:3)
