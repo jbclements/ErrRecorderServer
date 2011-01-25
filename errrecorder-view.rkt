@@ -10,7 +10,8 @@
          "naming.rkt")
 
 
-(provide render-page)
+(provide render-page
+         post-error)
 
 (define db-name "errrecorderdb")
 
