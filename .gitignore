@@ -4,3 +4,5 @@ log
 *~
 # server-specific start script:
 start-web-server.rkt
+#log file
+submit-log
