@@ -40,4 +40,5 @@
                #:launch-browser? #f
                #:listen-ip #f
                #:port 8022
-               #:servlet-path "/ers-submit")
+               #:servlet-path "/ers-submit"
+               #:log-file "./submit-log")
