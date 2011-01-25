@@ -9,6 +9,9 @@
          "signatures.rkt"
          "naming.rkt")
 
+
+(provide render-page)
+
 (define db-name "errrecorderdb")
 
 (define-values/invoke-unit model@
@@ -180,17 +183,6 @@
          [display-messages (reverse (list-tail messages (if (> total 5) (- total 5) 0)))])
     `(ul ,@(map (λ (m) `(li ,m)) display-messages))))
 
-; post-error : request? -> nothing
-; sends error off to errors collection in errrecorder mongo db
-(define (post-error request)
-  (let* ([bindings (request-bindings/raw request)]
-         [type (bytes->string/utf-8 (binding:form-value (bindings-assq #"type" bindings)))]
-         [time (bytes->string/utf-8 (binding:form-value (bindings-assq #"time" bindings)))]
-         [msg (bytes->string/utf-8 (binding:form-value (bindings-assq #"msg" bindings)))])
-    (error-insert! type time msg)
-    (response/xexpr
-     '(success))))
-
 (define (solution->rating solution)
   (dict-ref solution 'rating))
 
@@ -206,7 +198,4 @@
     " ")))
 
 #;(equal? (assemble-name `("a" "b" #f "c")) "a b * c")
-
-(provide post-error 
-         render-page)
 
