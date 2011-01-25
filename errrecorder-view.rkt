@@ -199,3 +199,16 @@
 
 #;(equal? (assemble-name `("a" "b" #f "c")) "a b * c")
 
+
+;; GET RID OF THIS AS SOON AS THIS SERVER IS ONLY HANDLING QUERIES:
+
+; post-error : request? -> nothing
+; sends error off to errors collection in errrecorder mongo db
+(define (post-error request)
+  (let* ([bindings (request-bindings/raw request)]
+         [type (bytes->string/utf-8 (binding:form-value (bindings-assq #"type" bindings)))]
+         [time (bytes->string/utf-8 (binding:form-value (bindings-assq #"time" bindings)))]
+         [msg (bytes->string/utf-8 (binding:form-value (bindings-assq #"msg" bindings)))])
+    (error-insert! type time msg)
+    (response/xexpr
+     '(success))))
