@@ -3,7 +3,8 @@
 (require web-server/servlet
          web-server/servlet-env
          racket/runtime-path
-         "errrecorder-view.rkt")
+         "errrecorder-view.rkt"
+         "submit-daemon.rkt")
 
 (define-runtime-path here ".")
 
