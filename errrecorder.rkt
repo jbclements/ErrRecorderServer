@@ -40,3 +40,8 @@
                   #:port 8022
                   #:servlet-path "/ers-submit"
                   #:log-file "./submit-log")))
+
+;; don't die so that the web-servers can run:
+(for ([i (in-naturals)])
+  (sleep 3600.0))
+
